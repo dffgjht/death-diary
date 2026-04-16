@@ -1,10 +1,32 @@
-# 死亡日记 (Death Diary) - 安卓应用
+# 回忆录 (Memoirs) - 安卓应用
 
-一个安全、私密的数字遗产管理安卓应用，包含社区留言板功能。
+一个安全、私密的数字遗产管理安卓应用，帮助您记录珍贵的回忆、保存重要的数字资产、制定周全的遗嘱计划。
 
-## 快速开始
+## 📥 下载安装
 
-### 使用 Android Studio 构建（推荐）
+**最新版本：** [v1.2 回忆录](https://github.com/dffgjht/death-diary/releases/tag/v1.2)
+
+点击上方链接下载 APK，直接安装即可使用。
+
+## ✨ 功能特性
+
+### 核心功能
+- 🔐 **生物识别认证** - 指纹/面容快速解锁
+- 🔐 **AES-256 加密存储** - 军事级数据保护
+- 📔 **日记系统** - 记录每一天的心情与感悟
+- 🔑 **密码保险箱** - 安全保管重要账号密码
+- 📜 **数字遗嘱** - 规划身后事的数字遗产
+- 📸 **回忆相册** - 保存珍贵的照片和视频
+- 💬 **社区留言板** - 与亲友分享心声
+
+### 更多特性
+- 🎨 Material Design 3 美观界面
+- 📱 纯本地存储，数据完全由您掌控
+- 🔒 隐私优先，无强制联网
+
+## 🚀 快速开始
+
+### 使用 Android Studio 构建
 
 1. 打开 Android Studio
 2. File → Open → 选择项目文件夹
@@ -14,109 +36,69 @@
 
 详细步骤：[ANDROID_STUDIO_BUILD_GUIDE.md](ANDROID_STUDIO_BUILD_GUIDE.md)
 
-### 使用 GitHub Actions 构建
+### 使用命令行构建
 
-1. 将项目推送到 GitHub
-2. 进入 Actions 页面
-3. 点击 "Run workflow"
-4. 等待 5-10 分钟后下载 APK
+```bash
+./gradlew assembleDebug
+```
 
-详细步骤：[GITHUB_ACTIONS_GUIDE.md](GITHUB_ACTIONS_GUIDE.md)
-
-## 功能特性
-
-### 核心功能
-- 🔐 AES-256 加密存储
-- 🔐 生物识别认证（指纹/面容）
-- 📔 日记系统（带心情标签）
-- 🔑 密码保险箱
-- 📜 数字遗嘱
-- 📸 回忆相册
-- ⚙️ 设置中心
-
-### 在线功能（新增）
-- 💬 **社区留言板**
-  - 用户注册和登录
-  - 发帖、评论、点赞
-  - 分类浏览（推荐、关注、热门）
-  - 标签系统
-  - 数据同步（云端备份）
-  - 实时互动
-- 🌐 **数据同步**
-  - 自动同步帖子到云端
-  - 下载远程数据
-  - 离线可用，在线增强
-
-## 技术栈
-
-- Kotlin 1.9.20
-- Jetpack Compose
-- Room Database
-- Material Design 3
-- Android Keystore (AES-256 加密)
-- **Retrofit 2.9.0** (HTTP 客户端)
-- **OkHttp 4.12.0** (网络请求)
-- **Gson 2.10.1** (JSON 解析)
-- **ViewModel + StateFlow** (状态管理)
-- **JWT** (身份认证)
-
-## 系统要求
+## 📱 系统要求
 
 - Android 7.0 (API 24) 或更高版本
 - 推荐使用 Android 10+ 以获得最佳体验
 
-## 文档
+## 🔧 技术栈
 
-- [README.md](README.md) - 项目介绍（本文件）
-- [ANDROID_STUDIO_BUILD_GUIDE.md](ANDROID_STUDIO_BUILD_GUIDE.md) - Android Studio 构建指南
-- [GITHUB_ACTIONS_GUIDE.md](GITHUB_ACTIONS_GUIDE.md) - GitHub Actions 构建指南
-- [FINAL_SUMMARY.md](FINAL_SUMMARY.md) - 项目完成总结
+| 技术 | 说明 |
+|------|------|
+| Kotlin 1.9.20 | 编程语言 |
+| Jetpack Compose | 现代 UI 框架 |
+| Room Database | 本地数据库 |
+| Material Design 3 | 设计语言 |
+| AES-256 加密 | 数据加密 |
+| 生物识别 API | 身份认证 |
 
-## 项目结构
+## 📁 项目结构
 
 ```
-death-diary/
+回忆录/
 ├── app/
 │   ├── src/main/
 │   │   ├── java/com/deathdiary/
 │   │   │   ├── MainActivity.kt
-│   │   │   ├── data/
-│   │   │   │   ├── Database.kt
-│   │   │   │   ├── CommunityDao.kt
-│   │   │   │   └── entities/
-│   │   │   ├── security/
-│   │   │   └── ui/screens/
-│   │   └── res/
+│   │   │   ├── data/           # 数据层
+│   │   │   ├── security/       # 安全加密
+│   │   │   └── ui/screens/     # 界面组件
+│   │   └── res/                # 资源文件
 │   └── build.gradle.kts
-├── gradle/
-│   └── wrapper/
-│       ├── gradle-wrapper.jar
-│       └── gradle-wrapper.properties
-├── .github/workflows/
-│   └── build-apk.yml
+├── gradle/wrapper/             # Gradle 包装器
+├── .github/workflows/          # CI/CD 流程
 ├── build.gradle.kts
 ├── settings.gradle.kts
 └── gradlew
 ```
 
-## 安全特性
+## 🔒 安全特性
 
-- AES-256-GCM 加密
-- Android Keystore 硬件级密钥存储
-- 生物识别认证
-- 主密码保护
-- 完全离线，无数据上传
+- **AES-256-GCM 加密** - 军事级数据保护
+- **Android Keystore** - 硬件级密钥存储
+- **生物识别认证** - 指纹/面容解锁
+- **完全离线** - 数据仅存储在您的设备
 
-## 许可证
+## 📄 许可证
 
 MIT License
 
-## 版本
+## 📌 版本历史
 
-1.1.0 (新增社区留言板功能)
+| 版本 | 更新内容 |
+|------|----------|
+| v1.2 | 修复闪退问题，优化 UI，精确日期到时分秒，本地相册 |
+| v1.1 | 新增社区留言板功能 |
+| v1.0 | 初始版本发布 |
 
 ---
 
-**开发者**: OpenClaw AI Assistant
-**项目位置**: `/vol1/@apphome/trim.openclaw/data/workspace/death-diary`
-**最后更新**: 2025-01-15
+**开发者**: dffgjht  
+**项目地址**: https://github.com/dffgjht/death-diary  
+**最后更新**: 2026-04-16
