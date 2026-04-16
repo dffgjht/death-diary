@@ -4,7 +4,7 @@
 
 ## 📥 下载安装
 
-**最新版本：** [v1.2.4 回忆录](https://github.com/dffgjht/death-diary/releases/tag/v1.2.4)
+**最新版本：** [v1.2.4 存证纪](https://github.com/dffgjht/death-diary/releases/tag/v1.2.4)
 
 点击上方链接下载 APK，直接安装即可使用。
 
@@ -62,7 +62,7 @@
 ## 📁 项目结构
 
 ```
-回忆录/
+存证纪/
 ├── app/
 │   ├── src/main/
 │   │   ├── java/com/deathdiary/
