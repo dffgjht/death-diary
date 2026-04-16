@@ -4,7 +4,7 @@
 
 ## 📥 下载安装
 
-**最新版本：** [v1.2.2 回忆录](https://github.com/dffgjht/death-diary/releases/tag/v1.2.2)
+**最新版本：** [v1.2.3 回忆录](https://github.com/dffgjht/death-diary/releases/tag/v1.2.3)
 
 点击上方链接下载 APK，直接安装即可使用。
 
@@ -34,7 +34,7 @@
 4. Build → Build Bundle(s) / APK(s) → Build APK(s)
 5. 在 `app/build/outputs/apk/debug/app-debug.apk` 获取 APK
 
-详细步骤：[ANDROID_STUDIO_BUILD_GUIDE.md](ANDROID_STUDIO_BUILD_GUIDE.md)
+详细步骤：[CONTRIBUTING.md](CONTRIBUTING.md)
 
 ### 使用命令行构建
 
@@ -96,6 +96,7 @@ MIT License
 
 | 版本 | 更新内容 |
 |------|----------|
+| [v1.2.3](https://github.com/dffgjht/death-diary/releases/tag/v1.2.3) | 新增备份/恢复功能、自动锁定机制、文档精简 |
 | [v1.2.2](https://github.com/dffgjht/death-diary/releases/tag/v1.2.2) | 安全增强: BCrypt密码哈希、数据库迁移策略、CI/CD完善 |
 | [v1.2.1](https://github.com/dffgjht/death-diary/releases/tag/v1.2.1) | 修复后台重登闪退、编辑删除功能、GPS定位、隐私政策 |
 | [v1.2](https://github.com/dffgjht/death-diary/releases/tag/v1.2) | 修复闪退问题，优化 UI，精确日期到时分秒，本地相册 |
