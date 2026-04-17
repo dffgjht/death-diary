@@ -1,6 +1,7 @@
 package com.deathdiary.ui.screens
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,6 +37,7 @@ import com.deathdiary.data.entities.MediaItem
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GalleryScreen(onNavigateBack: () -> Unit) {
+    val context = LocalContext.current
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("全部", "照片", "视频")
@@ -56,11 +58,20 @@ fun GalleryScreen(onNavigateBack: () -> Unit) {
         else -> mediaItems
     }
 
-    // Photo/Video picker
+    // Photo/Video picker - 使用 persistent 权限
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
         uris.forEach { uri ->
+            // 获取持久化读取权限
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                // 权限获取失败，继续使用（可能仍可预览）
+            }
             val newItem = MediaItem(
                 id = (mediaItems.maxOfOrNull { it.id } ?: 0) + 1,
                 title = "新照片",
@@ -77,6 +88,15 @@ fun GalleryScreen(onNavigateBack: () -> Unit) {
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
         uris.forEach { uri ->
+            // 获取持久化读取权限
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                // 权限获取失败，继续使用
+            }
             val newItem = MediaItem(
                 id = (mediaItems.maxOfOrNull { it.id } ?: 0) + 1,
                 title = "新视频",
