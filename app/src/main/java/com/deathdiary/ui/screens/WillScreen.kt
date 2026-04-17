@@ -1,16 +1,12 @@
 package com.deathdiary.ui.screens
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,34 +17,57 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.deathdiary.data.DeathDiaryDatabase
 import com.deathdiary.data.entities.Will
-import java.util.Calendar
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WillScreen(onNavigateBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
     var showAddDialog by remember { mutableStateOf(false) }
+    
+    // 使用 MutableStateFlow 管理数据
+    val willsFlow = remember { MutableStateFlow<List<Will>>(emptyList()) }
+    val wills by willsFlow.collectAsState()
+    var isLoading by remember { mutableStateOf(true) }
 
-    val wills = remember {
-        mutableStateListOf(
-            Will(
-                id = 1,
-                title = "给家人的信",
-                content = "亲爱的家人，如果你们看到这封信...",
-                recipientName = "家人",
-                recipientContact = "family@example.com",
-                releaseCondition = "date",
-                releaseDate = System.currentTimeMillis() + 31536000000L,
-                timestamp = System.currentTimeMillis()
-            )
-        )
+    // 加载数据函数
+    fun loadWills() {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    val database = DeathDiaryDatabase.getDatabase(context)
+                    val dao = database.willDao()
+                    val allWills = dao.getAllWillsSync()
+                    willsFlow.value = allWills
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    isLoading = false
+                }
+            }
+        }
+    }
+
+    // 首次加载
+    LaunchedEffect(Unit) {
+        loadWills()
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("遗嘱 / 遗言", fontWeight = FontWeight.Bold) },
+                title = { 
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    } else {
+                        Text("遗嘱 / 遗言", fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
@@ -74,75 +93,42 @@ fun WillScreen(onNavigateBack: () -> Unit) {
             }
         }
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f)
+        if (isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else if (wills.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.EditNote,
+                        contentDescription = null,
+                        modifier = Modifier.size(80.dp),
+                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                     )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "重要提示",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "这些信息将在您指定的时间自动发送给收件人，请谨慎填写。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
-                            )
-                        }
-                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("还没有创建遗嘱", style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.outline)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("点击 + 写下对家人的嘱托", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f))
                 }
             }
-
-            if (wills.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Default.EditNote,
-                                contentDescription = null,
-                                modifier = Modifier.size(80.dp),
-                                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("还没有创建遗嘱", style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.outline)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("点击 + 写下对家人的嘱托", style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f))
-                        }
-                    }
-                }
-            } else {
-                items(wills) { will ->
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(wills, key = { it.id }) { will ->
                     WillCard(will = will)
                 }
             }
@@ -153,36 +139,43 @@ fun WillScreen(onNavigateBack: () -> Unit) {
         AddWillFullDialog(
             onDismiss = { showAddDialog = false },
             onSave = { title, content, recipientName, recipientContact, releaseCondition, releaseDate ->
-                wills.add(
-                    Will(
-                        id = (wills.size + 1).toLong(),
-                        title = title,
-                        content = content,
-                        recipientName = recipientName,
-                        recipientContact = recipientContact,
-                        releaseCondition = releaseCondition,
-                        releaseDate = releaseDate,
-                        timestamp = System.currentTimeMillis()
-                    )
-                )
-                showAddDialog = false
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val database = DeathDiaryDatabase.getDatabase(context)
+                            val dao = database.willDao()
+                            
+                            dao.insertWill(
+                                Will(
+                                    title = title,
+                                    content = content,
+                                    recipientName = recipientName,
+                                    recipientContact = recipientContact,
+                                    releaseCondition = releaseCondition,
+                                    releaseDate = releaseDate,
+                                    timestamp = System.currentTimeMillis()
+                                )
+                            )
+                            loadWills() // 刷新数据
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                    showAddDialog = false
+                }
             }
         )
     }
 }
 
 @Composable
-fun WillCard(will: Will, onSendMessage: (String, String) -> Unit = { _, _ -> }) {
+fun WillCard(will: Will) {
     val context = LocalContext.current
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (will.isReleased)
-                MaterialTheme.colorScheme.surfaceVariant
-            else MaterialTheme.colorScheme.surface
-        )
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -196,21 +189,41 @@ fun WillCard(will: Will, onSendMessage: (String, String) -> Unit = { _, _ -> }) 
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                if (will.isReleased) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.tertiaryContainer,
-                        shape = RoundedCornerShape(8.dp)
+                
+                // 发送按钮
+                if (will.recipientContact.isNotBlank()) {
+                    IconButton(
+                        onClick = {
+                            val isEmail = will.recipientContact.contains("@")
+                            val intent = if (isEmail) {
+                                Intent(Intent.ACTION_SENDTO).apply {
+                                    data = Uri.parse("mailto:${will.recipientContact}")
+                                    putExtra(Intent.EXTRA_SUBJECT, will.title)
+                                    putExtra(Intent.EXTRA_TEXT, will.content)
+                                }
+                            } else {
+                                Intent(Intent.ACTION_SENDTO).apply {
+                                    data = Uri.parse("smsto:${will.recipientContact}")
+                                    putExtra("sms_body", will.content)
+                                }
+                            }
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
                     ) {
-                        Text(
-                            text = "已发布",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = "发送",
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = will.content,
                 style = MaterialTheme.typography.bodyMedium,
@@ -218,95 +231,19 @@ fun WillCard(will: Will, onSendMessage: (String, String) -> Unit = { _, _ -> }) 
                 maxLines = 4
             )
             Spacer(modifier = Modifier.height(12.dp))
-            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(
-                        text = "📩 收件人: ${will.recipientName}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (will.recipientContact.isNotBlank()) {
-                        Text(
-                            text = "   ${will.recipientContact}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-                if (will.releaseDate != null) {
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "📅 计划发布",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            text = formatDateTimeFull(will.releaseDate),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
-            // 发送消息按钮
-            if (will.recipientContact.isNotBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            if (will.recipientContact.contains("@")) {
-                                // 邮箱 - 打开邮件应用
-                                val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                    data = Uri.parse("mailto:${will.recipientContact}")
-                                    putExtra(Intent.EXTRA_SUBJECT, will.title)
-                                    putExtra(Intent.EXTRA_TEXT, will.content)
-                                }
-                                try {
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "无法打开邮件应用", Toast.LENGTH_SHORT).show()
-                                }
-                            } else {
-                                // 电话 - 打开短信应用
-                                val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                    data = Uri.parse("smsto:${will.recipientContact}")
-                                    putExtra("sms_body", "${will.title}\n\n${will.content}")
-                                }
-                                try {
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "无法打开短信应用", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                        modifier = Modifier.padding(top = 8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (will.recipientContact.contains("@")) Icons.Default.Email else Icons.Default.Sms,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (will.recipientContact.contains("@")) "发送邮件" else "发送短信",
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                }
+            Divider()
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "📩 收件人：${will.recipientName} (${will.recipientContact})",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (will.releaseDate != null) {
+                Text(
+                    text = "📅 发布日期：${formatDateTimeFull(will.releaseDate!!)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
@@ -321,340 +258,85 @@ fun AddWillFullDialog(
     var content by remember { mutableStateOf("") }
     var recipientName by remember { mutableStateOf("") }
     var recipientContact by remember { mutableStateOf("") }
-    var contactType by remember { mutableStateOf("phone") } // "phone" or "email"
     var releaseCondition by remember { mutableStateOf("date") }
-    var releaseDate by remember { mutableStateOf<Long?>(null) }
 
-    // 日期时间选择器状态
-    var showDatePicker by remember { mutableStateOf(false) }
-    var showTimePicker by remember { mutableStateOf(false) }
-    var selectedYear by remember { mutableIntStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
-    var selectedMonth by remember { mutableIntStateOf(Calendar.getInstance().get(Calendar.MONTH)) }
-    var selectedDay by remember { mutableIntStateOf(Calendar.getInstance().get(Calendar.DAY_OF_MONTH)) }
-    var selectedHour by remember { mutableIntStateOf(12) }
-    var selectedMinute by remember { mutableIntStateOf(0) }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.9f),
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.85f),
             shape = RoundedCornerShape(24.dp)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Header
+            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                Text("创建遗嘱",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold)
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("标题 *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text("遗言内容 *") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    minLines = 6
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedTextField(
+                    value = recipientName,
+                    onValueChange = { recipientName = it },
+                    label = { Text("收件人姓名 *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedTextField(
+                    value = recipientContact,
+                    onValueChange = { recipientContact = it },
+                    label = { Text("联系方式 *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("取消", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text("取消")
                     }
-                    Text("创建遗嘱",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    TextButton(
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
                         onClick = {
-                            val date = if (releaseCondition == "date" && releaseDate != null) {
-                                releaseDate
-                            } else null
-                            onSave(title, content, recipientName, recipientContact, releaseCondition, date)
+                            if (title.isNotBlank() && content.isNotBlank() && 
+                                recipientName.isNotBlank() && recipientContact.isNotBlank()) {
+                                onSave(title, content, recipientName, recipientContact, 
+                                    releaseCondition, null)
+                            }
                         },
-                        enabled = title.isNotBlank() && content.isNotBlank() &&
+                        enabled = title.isNotBlank() && content.isNotBlank() && 
                                 recipientName.isNotBlank() && recipientContact.isNotBlank()
                     ) {
-                        Text("保存",
-                            fontWeight = FontWeight.Bold,
-                            color = if (title.isNotBlank() && content.isNotBlank() &&
-                                    recipientName.isNotBlank() && recipientContact.isNotBlank())
-                                MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outline)
-                    }
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("标题 *") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Title, contentDescription = null) }
-                    )
-
-                    OutlinedTextField(
-                        value = content,
-                        onValueChange = { content = it },
-                        label = { Text("遗言内容 *") },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                        minLines = 6,
-                        maxLines = 15,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    Divider()
-
-                    Text("收件人信息",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary)
-
-                    OutlinedTextField(
-                        value = recipientName,
-                        onValueChange = { recipientName = it },
-                        label = { Text("收件人姓名 *") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
-                    )
-
-                    OutlinedTextField(
-                        value = recipientContact,
-                        onValueChange = {
-                            recipientContact = it
-                            // 自动检测类型
-                            contactType = if (it.contains("@")) "email" else "phone"
-                        },
-                        label = { Text("联系方式 *") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { 
-                            Icon(
-                                if (contactType == "email") Icons.Default.Email else Icons.Default.Phone,
-                                contentDescription = null
-                            ) 
-                        },
-                        trailingIcon = {
-                            Row {
-                                IconButton(onClick = { contactType = "phone" }) {
-                                    Icon(
-                                        Icons.Default.Phone,
-                                        contentDescription = "电话",
-                                        tint = if (contactType == "phone") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                                IconButton(onClick = { contactType = "email" }) {
-                                    Icon(
-                                        Icons.Default.Email,
-                                        contentDescription = "邮箱",
-                                        tint = if (contactType == "email") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                            }
-                        }
-                    )
-
-                    // 联系方式类型提示
-                    Text(
-                        text = if (contactType == "email") "将发送邮件到指定邮箱" else "将发送短信到指定电话号码",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-
-                    Divider()
-
-                    Text("发布条件",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary)
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = releaseCondition == "date",
-                            onClick = { releaseCondition = "date" },
-                            label = { Text("指定日期") },
-                            leadingIcon = if (releaseCondition == "date") {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                            } else null
-                        )
-                        FilterChip(
-                            selected = releaseCondition == "manual",
-                            onClick = { releaseCondition = "manual" },
-                            label = { Text("手动发布") },
-                            leadingIcon = if (releaseCondition == "manual") {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                            } else null
-                        )
-                    }
-
-                    if (releaseCondition == "date") {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text("选择发布日期和时间（精确到时分）",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                // 日期选择
-                                OutlinedButton(
-                                    onClick = { showDatePicker = true },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(Icons.Default.CalendarToday, contentDescription = null,
-                                        modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        if (selectedYear > 0) "${selectedYear}年${selectedMonth + 1}月${selectedDay}日"
-                                        else "选择日期"
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                // 时间选择
-                                OutlinedButton(
-                                    onClick = { showTimePicker = true },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(Icons.Default.Schedule, contentDescription = null,
-                                        modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(String.format("%02d:%02d", selectedHour, selectedMinute))
-                                }
-
-                                if (releaseDate != null) {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.primaryContainer
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(Icons.Default.Schedule,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = formatDateTimeFull(releaseDate!!),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        Text("保存")
                     }
                 }
             }
         }
-    }
-
-    // Date Picker Dialog
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = releaseDate ?: System.currentTimeMillis()
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        val cal = Calendar.getInstance().apply { timeInMillis = millis }
-                        selectedYear = cal.get(Calendar.YEAR)
-                        selectedMonth = cal.get(Calendar.MONTH)
-                        selectedDay = cal.get(Calendar.DAY_OF_MONTH)
-                        // 更新 releaseDate
-                        val cal2 = Calendar.getInstance().apply {
-                            set(Calendar.YEAR, selectedYear)
-                            set(Calendar.MONTH, selectedMonth)
-                            set(Calendar.DAY_OF_MONTH, selectedDay)
-                            set(Calendar.HOUR_OF_DAY, selectedHour)
-                            set(Calendar.MINUTE, selectedMinute)
-                            set(Calendar.SECOND, 0)
-                        }
-                        releaseDate = cal2.timeInMillis
-                    }
-                    showDatePicker = false
-                }) {
-                    Text("确定")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("取消")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
-
-    // Time Picker Dialog
-    if (showTimePicker) {
-        val timePickerState = rememberTimePickerState(
-            initialHour = selectedHour,
-            initialMinute = selectedMinute
-        )
-        AlertDialog(
-            onDismissRequest = { showTimePicker = false },
-            title = { Text("选择时间") },
-            text = {
-                TimePicker(state = timePickerState)
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    selectedHour = timePickerState.hour
-                    selectedMinute = timePickerState.minute
-                    // 更新 releaseDate
-                    if (releaseDate != null || releaseCondition == "date") {
-                        val base = releaseDate ?: System.currentTimeMillis()
-                        val cal = Calendar.getInstance().apply { timeInMillis = base }
-                        cal.set(Calendar.HOUR_OF_DAY, selectedHour)
-                        cal.set(Calendar.MINUTE, selectedMinute)
-                        cal.set(Calendar.SECOND, 0)
-                        releaseDate = cal.timeInMillis
-                    } else {
-                        val cal = Calendar.getInstance().apply {
-                            set(Calendar.YEAR, selectedYear)
-                            set(Calendar.MONTH, selectedMonth)
-                            set(Calendar.DAY_OF_MONTH, selectedDay)
-                            set(Calendar.HOUR_OF_DAY, selectedHour)
-                            set(Calendar.MINUTE, selectedMinute)
-                            set(Calendar.SECOND, 0)
-                        }
-                        releaseDate = cal.timeInMillis
-                    }
-                    showTimePicker = false
-                }) {
-                    Text("确定")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) {
-                    Text("取消")
-                }
-            }
-        )
     }
 }
