@@ -13,11 +13,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.deathdiary.data.BackupManager
+import com.deathdiary.utils.BackupManager
 import com.deathdiary.data.DeathDiaryDatabase
 import kotlinx.coroutines.*
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.first
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,7 +43,21 @@ fun SettingsScreen(
     var isProcessing by remember { mutableStateOf(false) }
     var backupResult by remember { mutableStateOf<String?>(null) }
     var restoreResult by remember { mutableStateOf<String?>(null) }
-    var latestBackupFile by remember { mutableStateOf(backupManager.getLatestBackupFile()?.absolutePath) }
+    var latestBackupFile by remember { mutableStateOf<String?>(backupManager.getLocalBackups().firstOrNull()?.absolutePath) }
+    var biometricStatus by remember { mutableStateOf("检测中...") }
+    var showBiometricInfo by remember { mutableStateOf(false) }
+
+    // 检测生物识别状态
+    LaunchedEffect(Unit) {
+        val biometricManager = androidx.biometric.BiometricManager.from(context)
+        biometricStatus = when (biometricManager.canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG)) {
+            androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS -> "✅ 指纹识别可用"
+            else -> when (biometricManager.canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK)) {
+                androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS -> "✅ 人脸识别可用"
+                else -> "⚠️ 设备不支持生物识别"
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -73,7 +90,8 @@ fun SettingsScreen(
                 SettingItem(
                     icon = Icons.Default.Fingerprint,
                     title = "生物识别",
-                    description = "使用指纹或面容解锁",
+                    description = biometricStatus,
+                    onClick = { showBiometricInfo = true },
                     trailing = {
                         Switch(
                             checked = biometricEnabled,
@@ -154,7 +172,7 @@ fun SettingsScreen(
                 SettingItem(
                     icon = Icons.Default.Info,
                     title = "版本",
-                    description = "1.2.4"
+                    description = "1.2.5"
                 )
                 Divider()
                 SettingItem(
@@ -215,6 +233,34 @@ fun SettingsScreen(
                 PrivacyPolicyDialog(onDismiss = { showPrivacyDialog = false })
             }
 
+            // 生物识别信息对话框
+            if (showBiometricInfo) {
+                AlertDialog(
+                    onDismissRequest = { showBiometricInfo = false },
+                    title = { Text("🔐 生物识别设置") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("设备支持以下生物识别方式：")
+                            Text("• 指纹识别 (BIOMETRIC_STRONG)")
+                            Text("• 人脸识别 (BIOMETRIC_WEAK)")
+                            Divider()
+                            Text("当前设置优先级：", fontWeight = FontWeight.Bold)
+                            Text("1. 指纹识别（优先）")
+                            Text("2. 人脸识别（备选）")
+                            Divider()
+                            Text("提示：", color = MaterialTheme.colorScheme.primary)
+                            Text("• 请确保已在系统设置中录入指纹或人脸")
+                            Text("• 不同设备支持的生物识别类型可能不同")
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = { showBiometricInfo = false }) {
+                            Text("知道了")
+                        }
+                    }
+                )
+            }
+
             // 清除数据确认对话框
             if (showClearDataDialog) {
                 AlertDialog(
@@ -256,33 +302,21 @@ fun SettingsScreen(
                     AlertDialog(
                         onDismissRequest = { showBackupDialog = false },
                         title = { Text("备份数据") },
-                        text = { Text("确定要创建数据备份吗？\n\n备份将保存到手机 Downloads 目录。") },
+                        text = { Text("确定要创建数据备份吗？\n\n备份将保存到应用私有目录。") },
                         confirmButton = {
                             Button(
                                 onClick = {
                                     isProcessing = true
                                     scope.launch {
-                                        // 收集数据
-                                        val diaryEntries = mutableListOf<com.deathdiary.data.entities.DiaryEntry>()
-                                        val vaultItems = mutableListOf<com.deathdiary.data.entities.VaultItem>()
-                                        val wills = mutableListOf<com.deathdiary.data.entities.Will>()
-                                        val mediaItems = mutableListOf<com.deathdiary.data.entities.MediaItem>()
-                                        
-                                        database.diaryEntryDao().getAllEntries().collect { diaryEntries.addAll(it) }
-                                        database.vaultItemDao().getAllItems().collect { vaultItems.addAll(it) }
-                                        database.willDao().getAllWills().collect { wills.addAll(it) }
-                                        database.mediaItemDao().getAllItems().collect { mediaItems.addAll(it) }
-                                        
-                                        val result = backupManager.createBackup(
-                                            diaryEntries, vaultItems, wills, mediaItems
-                                        )
-                                        
-                                        isProcessing = false
-                                        if (result.isSuccess) {
-                                            latestBackupFile = result.getOrNull()
-                                            backupResult = "备份成功！\n保存位置: Downloads/${result.getOrNull()?.substringAfterLast("/")}"
-                                        } else {
-                                            backupResult = "备份失败: ${result.exceptionOrNull()?.message}"
+                                        withContext(Dispatchers.IO) {
+                                            val backupPath = backupManager.exportData()
+                                            isProcessing = false
+                                            if (backupPath != null) {
+                                                latestBackupFile = backupPath
+                                                backupResult = "备份成功！\n保存位置: $backupPath"
+                                            } else {
+                                                backupResult = "备份失败"
+                                            }
                                         }
                                         showBackupDialog = false
                                     }
@@ -327,85 +361,30 @@ fun SettingsScreen(
                         dismissButton = { }
                     )
                 } else {
+                    val latestBackup = backupManager.getLocalBackups().firstOrNull()
                     AlertDialog(
                         onDismissRequest = { showRestoreDialog = false },
                         title = { Text("恢复数据") },
-                        text = { Text("确定要从备份恢复数据吗？\n\n注意：当前数据将被覆盖，请确保已有最新备份！\n\n文件名: ${latestBackupFile?.substringAfterLast("/")}") },
+                        text = { Text("确定要从备份恢复数据吗？\n\n注意：当前数据将被覆盖，请确保已有最新备份！\n\n${if (latestBackup != null) "最新备份: ${latestBackup.name}" else "暂无备份文件"}") },
                         confirmButton = {
                             Button(
                                 onClick = {
-                                    isProcessing = true
-                                    scope.launch {
-                                        latestBackupFile?.let { path ->
-                                            val result = backupManager.readBackup(path)
-                                            if (result.isSuccess) {
-                                                val backupData = result.getOrNull()!!
-                                                
-                                                // 清除现有数据并恢复
-                                                withContext(Dispatchers.IO) {
-                                                    database.diaryEntryDao().getAllEntries().collect { entries ->
-                                                        entries.forEach { database.diaryEntryDao().deleteEntry(it) }
-                                                    }
-                                                    database.vaultItemDao().getAllItems().collect { items ->
-                                                        items.forEach { database.vaultItemDao().deleteItem(it) }
-                                                    }
-                                                    database.willDao().getAllWills().collect { wills ->
-                                                        wills.forEach { database.willDao().deleteWill(it) }
-                                                    }
-                                                    database.mediaItemDao().getAllItems().collect { items ->
-                                                        items.forEach { database.mediaItemDao().deleteItem(it) }
-                                                    }
-                                                    
-                                                    // 恢复数据
-                                                    backupData.diaryEntries.forEach { b ->
-                                                        database.diaryEntryDao().insertEntry(
-                                                            com.deathdiary.data.entities.DiaryEntry(
-                                                                title = b.title, content = b.content,
-                                                                mood = b.mood,
-                                                                latitude = b.latitude, longitude = b.longitude,
-                                                                locationName = b.locationName, timestamp = b.timestamp,
-                                                                mediaPaths = b.mediaPaths
-                                                            )
-                                                        )
-                                                    }
-                                                    backupData.vaultItems.forEach { b ->
-                                                        database.vaultItemDao().insertItem(
-                                                            com.deathdiary.data.entities.VaultItem(
-                                                                title = b.title, category = b.category,
-                                                                content = b.content, username = b.username,
-                                                                password = b.password, url = b.url,
-                                                                timestamp = b.timestamp
-                                                            )
-                                                        )
-                                                    }
-                                                    backupData.wills.forEach { b ->
-                                                        database.willDao().insertWill(
-                                                            com.deathdiary.data.entities.Will(
-                                                                title = b.title, content = b.content,
-                                                                recipientName = b.recipientName,
-                                                                recipientContact = b.recipientContact,
-                                                                releaseCondition = b.releaseCondition,
-                                                                isReleased = b.isReleased, releaseDate = b.releaseDate,
-                                                                timestamp = b.timestamp
-                                                            )
-                                                        )
-                                                    }
-                                                    backupData.mediaItems.forEach { b ->
-                                                        database.mediaItemDao().insertItem(
-                                                            com.deathdiary.data.entities.MediaItem(
-                                                                title = b.title, description = b.description,
-                                                                filePath = b.filePath, type = b.type,
-                                                                timestamp = b.timestamp, tags = b.tags
-                                                            )
-                                                        )
-                                                    }
+                                    latestBackup?.let { backupFile ->
+                                        isProcessing = true
+                                        scope.launch {
+                                            withContext(Dispatchers.IO) {
+                                                val success = backupManager.importData(backupFile.absolutePath, merge = false)
+                                                isProcessing = false
+                                                restoreResult = if (success) {
+                                                    "恢复成功！\n请返回各模块查看恢复的数据。"
+                                                } else {
+                                                    "恢复失败"
                                                 }
-                                                restoreResult = "恢复成功！\n请返回各模块查看恢复的数据。"
-                                            } else {
-                                                restoreResult = "恢复失败: ${result.exceptionOrNull()?.message}"
                                             }
+                                            showRestoreDialog = false
                                         }
-                                        isProcessing = false
+                                    } ?: run {
+                                        restoreResult = "没有找到备份文件"
                                         showRestoreDialog = false
                                     }
                                 },
