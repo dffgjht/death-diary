@@ -1,5 +1,9 @@
 package com.deathdiary.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -167,7 +172,8 @@ fun WillScreen(onNavigateBack: () -> Unit) {
 }
 
 @Composable
-fun WillCard(will: Will) {
+fun WillCard(will: Will, onSendMessage: (String, String) -> Unit = { _, _ -> }) {
+    val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -248,6 +254,60 @@ fun WillCard(will: Will) {
                     }
                 }
             }
+
+            // 发送消息按钮
+            if (will.recipientContact.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            if (will.recipientContact.contains("@")) {
+                                // 邮箱 - 打开邮件应用
+                                val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                    data = Uri.parse("mailto:${will.recipientContact}")
+                                    putExtra(Intent.EXTRA_SUBJECT, will.title)
+                                    putExtra(Intent.EXTRA_TEXT, will.content)
+                                }
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "无法打开邮件应用", Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                // 电话 - 打开短信应用
+                                val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                    data = Uri.parse("smsto:${will.recipientContact}")
+                                    putExtra("sms_body", "${will.title}\n\n${will.content}")
+                                }
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "无法打开短信应用", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.padding(top = 8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (will.recipientContact.contains("@")) Icons.Default.Email else Icons.Default.Sms,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (will.recipientContact.contains("@")) "发送邮件" else "发送短信",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -261,6 +321,7 @@ fun AddWillFullDialog(
     var content by remember { mutableStateOf("") }
     var recipientName by remember { mutableStateOf("") }
     var recipientContact by remember { mutableStateOf("") }
+    var contactType by remember { mutableStateOf("phone") } // "phone" or "email"
     var releaseCondition by remember { mutableStateOf("date") }
     var releaseDate by remember { mutableStateOf<Long?>(null) }
 
@@ -365,12 +426,46 @@ fun AddWillFullDialog(
 
                     OutlinedTextField(
                         value = recipientContact,
-                        onValueChange = { recipientContact = it },
-                        label = { Text("联系方式（邮箱/电话）*") },
+                        onValueChange = {
+                            recipientContact = it
+                            // 自动检测类型
+                            contactType = if (it.contains("@")) "email" else "phone"
+                        },
+                        label = { Text("联系方式 *") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) }
+                        leadingIcon = { 
+                            Icon(
+                                if (contactType == "email") Icons.Default.Email else Icons.Default.Phone,
+                                contentDescription = null
+                            ) 
+                        },
+                        trailingIcon = {
+                            Row {
+                                IconButton(onClick = { contactType = "phone" }) {
+                                    Icon(
+                                        Icons.Default.Phone,
+                                        contentDescription = "电话",
+                                        tint = if (contactType == "phone") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                                IconButton(onClick = { contactType = "email" }) {
+                                    Icon(
+                                        Icons.Default.Email,
+                                        contentDescription = "邮箱",
+                                        tint = if (contactType == "email") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                        }
+                    )
+
+                    // 联系方式类型提示
+                    Text(
+                        text = if (contactType == "email") "将发送邮件到指定邮箱" else "将发送短信到指定电话号码",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
                     )
 
                     Divider()
