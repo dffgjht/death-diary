@@ -1,50 +1,66 @@
 package com.deathdiary.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.deathdiary.data.DeathDiaryDatabase
 import com.deathdiary.data.entities.VaultItem
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VaultScreen(onNavigateBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
     var showAddDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var editingItem by remember { mutableStateOf<VaultItem?>(null) }
+    
+    // 使用 MutableStateFlow 管理数据
+    val itemsFlow = remember { MutableStateFlow<List<VaultItem>>(emptyList()) }
+    val items by itemsFlow.collectAsState()
+    var isLoading by remember { mutableStateOf(true) }
 
-    val items = remember {
-        mutableStateListOf(
-            VaultItem(
-                id = 1,
-                title = "银行账户",
-                category = "accounts",
-                content = "主要银行账户信息",
-                username = "user123",
-                url = "https://bank.example.com",
-                timestamp = System.currentTimeMillis()
-            ),
-            VaultItem(
-                id = 2,
-                title = "保险单号",
-                category = "documents",
-                content = "人寿保险保单信息",
-                timestamp = System.currentTimeMillis()
-            )
-        )
+    // 加载数据函数
+    fun loadItems() {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    val database = DeathDiaryDatabase.getDatabase(context)
+                    val dao = database.vaultItemDao()
+                    val allItems = dao.getAllItemsSync()
+                    itemsFlow.value = allItems
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    isLoading = false
+                }
+            }
+        }
+    }
+
+    // 首次加载
+    LaunchedEffect(Unit) {
+        loadItems()
+    }
+
+    // 刷新数据
+    LaunchedEffect(onNavigateBack) {
+        loadItems()
     }
 
     val filteredItems = remember(searchQuery, items) {
@@ -98,7 +114,14 @@ fun VaultScreen(onNavigateBack: () -> Unit) {
                 shape = RoundedCornerShape(12.dp)
             )
 
-            if (filteredItems.isEmpty()) {
+            if (isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else if (filteredItems.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -124,7 +147,7 @@ fun VaultScreen(onNavigateBack: () -> Unit) {
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(filteredItems) { item ->
+                    items(filteredItems, key = { it.id }) { item ->
                         VaultItemCard(item = item, onClick = { editingItem = item })
                     }
                 }
@@ -136,62 +159,88 @@ fun VaultScreen(onNavigateBack: () -> Unit) {
         AddVaultItemFullDialog(
             onDismiss = { showAddDialog = false },
             onSave = { title, category, content, username, password, url ->
-                items.add(
-                    VaultItem(
-                        id = (items.size + 1).toLong(),
-                        title = title,
-                        category = category,
-                        content = content,
-                        username = username,
-                        password = password,
-                        url = url,
-                        timestamp = System.currentTimeMillis()
-                    )
-                )
-                showAddDialog = false
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val database = DeathDiaryDatabase.getDatabase(context)
+                            val dao = database.vaultItemDao()
+                            
+                            val newItem = VaultItem(
+                                title = title,
+                                category = category,
+                                content = content,
+                                username = username,
+                                password = password,
+                                url = url,
+                                timestamp = System.currentTimeMillis()
+                            )
+                            
+                            dao.insertItem(newItem)
+                            loadItems() // 刷新数据
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                    showAddDialog = false
+                }
             }
         )
     }
 
-    // 编辑项目对话框
+    // 编辑对话框
     editingItem?.let { item ->
         EditVaultItemDialog(
             item = item,
             onDismiss = { editingItem = null },
             onSave = { title, category, content, username, password, url ->
-                // 找到并更新项目
-                val index = items.indexOfFirst { it.id == item.id }
-                if (index >= 0) {
-                    // 创建新的 VaultItem 替换旧的
-                    val updatedItem = VaultItem(
-                        id = item.id,
-                        title = title,
-                        category = category,
-                        content = content,
-                        username = username,
-                        password = password,
-                        url = url,
-                        timestamp = item.timestamp
-                    )
-                    // 使用 removeAt 和 add 来更新（mutableStateListOf 支持此操作）
-                    items.removeAt(index)
-                    items.add(index, updatedItem)
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val database = DeathDiaryDatabase.getDatabase(context)
+                            val dao = database.vaultItemDao()
+                            
+                            val updatedItem = VaultItem(
+                                id = item.id,
+                                title = title,
+                                category = item.category,
+                                content = content,
+                                username = username,
+                                password = if (password.isNotBlank()) password else item.password,
+                                url = item.url,
+                                timestamp = item.timestamp,
+                                isEncrypted = item.isEncrypted
+                            )
+                            
+                            dao.updateItem(updatedItem)
+                            loadItems() // 刷新数据
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                    editingItem = null
                 }
-                editingItem = null
             },
             onDelete = {
-                items.remove(item)
-                editingItem = null
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val database = DeathDiaryDatabase.getDatabase(context)
+                            val dao = database.vaultItemDao()
+                            dao.deleteItem(item)
+                            loadItems() // 刷新数据
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                    editingItem = null
+                }
             }
         )
     }
 }
 
 @Composable
-fun VaultItemCard(
-    item: VaultItem,
-    onClick: () -> Unit = {}
-) {
+fun VaultItemCard(item: VaultItem, onClick: () -> Unit) {
     val categoryIcon = when (item.category) {
         "accounts" -> Icons.Default.Person
         "documents" -> Icons.Default.Description
@@ -210,7 +259,7 @@ fun VaultItemCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
@@ -241,44 +290,13 @@ fun VaultItemCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (item.username.isNotBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Person, contentDescription = null,
-                                modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.outline)
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = item.username,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
-                    }
-                    if (item.url.isNotBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Link, contentDescription = null,
-                                modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = item.url.take(30),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
                 }
             }
         }
     }
 }
 
+// 简化版的添加对话框
 @Composable
 fun AddVaultItemFullDialog(
     onDismiss: () -> Unit,
@@ -290,43 +308,70 @@ fun AddVaultItemFullDialog(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
-    var expanded by remember { mutableStateOf(false) }
 
-    val categoryOptions = listOf(
-        "accounts" to "💳 账号密码",
-        "documents" to "📄 重要文档",
-        "notes" to "📝 私人笔记",
-        "cards" to "💳 银行卡"
-    )
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.85f),
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.8f),
             shape = RoundedCornerShape(24.dp)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Header
+            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                Text("添加保险箱项目",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold)
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("标题 *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text("内容") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+                    minLines = 3
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("用户名") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("密码") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("取消", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text("取消")
                     }
-                    Text("添加保险箱项目",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    TextButton(
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
                         onClick = {
                             if (title.isNotBlank()) {
                                 onSave(title, category, content, username, password, url)
@@ -334,112 +379,8 @@ fun AddVaultItemFullDialog(
                         },
                         enabled = title.isNotBlank()
                     ) {
-                        Text("保存",
-                            fontWeight = FontWeight.Bold,
-                            color = if (title.isNotBlank())
-                                MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outline)
+                        Text("保存")
                     }
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    // 标题
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("标题 *") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Title, contentDescription = null) }
-                    )
-
-                    // 分类下拉
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = !expanded }
-                    ) {
-                        OutlinedTextField(
-                            value = categoryOptions.find { it.first == category }?.second ?: "选择分类",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("分类") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            categoryOptions.forEach { (value, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        category = value
-                                        expanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    // 内容描述
-                    OutlinedTextField(
-                        value = content,
-                        onValueChange = { content = it },
-                        label = { Text("内容描述") },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
-                        minLines = 3,
-                        maxLines = 6,
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) }
-                    )
-
-                    Divider()
-
-                    Text("账号信息（可选）",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold)
-
-                    OutlinedTextField(
-                        value = username,
-                        onValueChange = { username = it },
-                        label = { Text("用户名 / 账号") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
-                    )
-
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("密码") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) }
-                    )
-
-                    OutlinedTextField(
-                        value = url,
-                        onValueChange = { url = it },
-                        label = { Text("网址链接") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) }
-                    )
                 }
             }
         }
@@ -454,204 +395,97 @@ fun EditVaultItemDialog(
     onDelete: () -> Unit
 ) {
     var title by remember { mutableStateOf(item.title) }
-    var category by remember { mutableStateOf(item.category) }
     var content by remember { mutableStateOf(item.content) }
     var username by remember { mutableStateOf(item.username) }
-    var password by remember { mutableStateOf(item.password) }
-    var url by remember { mutableStateOf(item.url) }
-    var expanded by remember { mutableStateOf(false) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
 
-    val categoryOptions = listOf(
-        "accounts" to "💳 账号密码",
-        "documents" to "📄 重要文档",
-        "notes" to "📝 私人笔记",
-        "cards" to "💳 银行卡"
-    )
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.85f),
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.8f),
             shape = RoundedCornerShape(24.dp)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Header
+            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                Text("编辑项目",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold)
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("标题 *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text("内容") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+                    minLines = 3
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("用户名") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("新密码 (留空不变)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("取消", color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
-                    Text("编辑项目",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    TextButton(
-                        onClick = {
-                            if (title.isNotBlank()) {
-                                onSave(title, category, content, username, password, url)
-                            }
-                        },
-                        enabled = title.isNotBlank()
-                    ) {
-                        Text("保存",
-                            fontWeight = FontWeight.Bold,
-                            color = if (title.isNotBlank())
-                                MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outline)
-                    }
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("标题 *") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Title, contentDescription = null) }
-                    )
-
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = !expanded }
-                    ) {
-                        OutlinedTextField(
-                            value = categoryOptions.find { it.first == category }?.second ?: "选择分类",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("分类") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(),
-                            shape = RoundedCornerShape(12.dp)
+                    Button(
+                        onClick = onDelete,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
                         )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            categoryOptions.forEach { (value, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        category = value
-                                        expanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = content,
-                        onValueChange = { content = it },
-                        label = { Text("内容描述") },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
-                        minLines = 3,
-                        maxLines = 6,
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) }
-                    )
-
-                    Divider()
-
-                    Text("账号信息（可选）",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold)
-
-                    OutlinedTextField(
-                        value = username,
-                        onValueChange = { username = it },
-                        label = { Text("用户名 / 账号") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
-                    )
-
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("密码") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) }
-                    )
-
-                    OutlinedTextField(
-                        value = url,
-                        onValueChange = { url = it },
-                        label = { Text("网址链接") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) }
-                    )
-
-                    Divider()
-
-                    // 删除按钮
-                    OutlinedButton(
-                        onClick = { showDeleteConfirm = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        ),
-                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = null)
+                        Text("删除")
+                    }
+                    
+                    Row {
+                        TextButton(onClick = onDismiss) {
+                            Text("取消")
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("删除此项目")
+                        Button(
+                            onClick = {
+                                if (title.isNotBlank()) {
+                                    onSave(title, item.category, content, username, 
+                                        if (password.isNotBlank()) password else item.password, 
+                                        item.url)
+                                }
+                            },
+                            enabled = title.isNotBlank()
+                        ) {
+                            Text("保存")
+                        }
                     }
                 }
             }
         }
-    }
-
-    // 删除确认对话框
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("确认删除") },
-            text = { Text("确定要删除「${item.title}」吗？此操作不可撤销。") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDeleteConfirm = false
-                        onDelete()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("删除")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("取消")
-                }
-            }
-        )
     }
 }
