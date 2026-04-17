@@ -159,16 +159,23 @@ fun VaultScreen(onNavigateBack: () -> Unit) {
             item = item,
             onDismiss = { editingItem = null },
             onSave = { title, category, content, username, password, url ->
+                // 找到并更新项目
                 val index = items.indexOfFirst { it.id == item.id }
                 if (index >= 0) {
-                    items[index] = item.copy(
+                    // 创建新的 VaultItem 替换旧的
+                    val updatedItem = VaultItem(
+                        id = item.id,
                         title = title,
                         category = category,
                         content = content,
                         username = username,
                         password = password,
-                        url = url
+                        url = url,
+                        timestamp = item.timestamp
                     )
+                    // 使用 removeAt 和 add 来更新（mutableStateListOf 支持此操作）
+                    items.removeAt(index)
+                    items.add(index, updatedItem)
                 }
                 editingItem = null
             },
