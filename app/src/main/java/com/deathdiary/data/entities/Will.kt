@@ -11,6 +11,7 @@ data class Will(
     val content: String,
     val recipientName: String,
     val recipientContact: String,
+    val contactType: String = "phone", // "phone" or "email"
     val releaseCondition: String, // date, trigger, etc.
     val releaseDate: Long? = null, // Timestamp for scheduled release
     val isReleased: Boolean = false,
