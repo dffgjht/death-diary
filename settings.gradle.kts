@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "MemoAmber"
 include(":app")
+include(":desktop")
