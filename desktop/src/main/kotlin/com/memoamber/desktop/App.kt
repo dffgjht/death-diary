@@ -2,15 +2,28 @@ package com.memoamber.desktop
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.memoamber.desktop.ui.screens.*
 import com.memoamber.desktop.ui.theme.MemoAmberTheme
+import com.memoamber.desktop.ui.theme.SidebarBackground
+import com.memoamber.desktop.ui.theme.SidebarOnBackground
+import com.memoamber.desktop.ui.theme.SidebarSelectedItem
 import com.memoamber.desktop.data.DesktopSecurityManager
 import com.memoamber.desktop.data.DesktopDatabaseManager
 
@@ -52,6 +65,12 @@ fun MemoAmberApp() {
     }
 }
 
+data class NavItem(
+    val label: String,
+    val selectedIcon: ImageVector,
+    val unselectedIcon: ImageVector
+)
+
 @Composable
 fun MainScreen(
     securityManager: DesktopSecurityManager,
@@ -60,54 +79,124 @@ fun MainScreen(
     onLock: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    val navItems = listOf(
+        NavItem("主页", Icons.Filled.Home, Icons.Outlined.Home),
+        NavItem("日记", Icons.Filled.Book, Icons.Outlined.Book),
+        NavItem("密码箱", Icons.Filled.Lock, Icons.Outlined.Lock),
+        NavItem("留言", Icons.Filled.EditNote, Icons.Outlined.EditNote),
+        NavItem("设置", Icons.Filled.Settings, Icons.Outlined.Settings),
+    )
 
     Row(modifier = Modifier.fillMaxSize()) {
-        NavigationRail(
-            modifier = Modifier.fillMaxHeight(),
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        // ===== 左侧深色侧边导航 =====
+        Column(
+            modifier = Modifier
+                .width(220.dp)
+                .fillMaxHeight()
+                .background(SidebarBackground)
+                .padding(vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.weight(0.5f))
-
-            val tabs = listOf(
-                "主页" to Icons.Filled.Home,
-                "日记" to Icons.Filled.Book,
-                "密码箱" to Icons.Filled.Lock,
-                "遗嘱" to Icons.Filled.EditNote,
-                "设置" to Icons.Filled.Settings
+            // Logo 区域
+            Icon(
+                imageVector = Icons.Filled.AutoAwesome,
+                contentDescription = null,
+                modifier = Modifier.size(36.dp),
+                tint = SidebarSelectedItem
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "记忆琥珀",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = SidebarOnBackground
+            )
+            Text(
+                "MemoAmber",
+                fontSize = 12.sp,
+                color = SidebarOnBackground.copy(alpha = 0.5f)
             )
 
-            tabs.forEachIndexed { index, (label, icon) ->
-                NavigationRailItem(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    icon = { Icon(icon, label) },
-                    label = { Text(label, maxLines = 1) }
-                )
+            Spacer(Modifier.height(32.dp))
+
+            // 导航项
+            navItems.forEachIndexed { index, item ->
+                val isSelected = selectedTab == index
+                val bgColor = if (isSelected) SidebarSelectedItem.copy(alpha = 0.2f) else Color.Transparent
+                val contentColor = if (isSelected) SidebarSelectedItem else SidebarOnBackground.copy(alpha = 0.7f)
+                val icon = if (isSelected) item.selectedIcon else item.unselectedIcon
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(bgColor)
+                        .clickable { selectedTab = index }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = item.label,
+                        modifier = Modifier.size(22.dp),
+                        tint = contentColor
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        item.label,
+                        fontSize = 14.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = contentColor
+                    )
+                }
             }
 
             Spacer(Modifier.weight(1f))
 
-            NavigationRailItem(
-                selected = false,
-                onClick = onLock,
-                icon = { Icon(Icons.Filled.Lock, "锁定") },
-                label = { Text("锁定", maxLines = 1) }
-            )
-            Spacer(Modifier.height(16.dp))
+            // 底部锁定按钮
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onLock() }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Outlined.Lock,
+                    "锁定",
+                    modifier = Modifier.size(22.dp),
+                    tint = SidebarOnBackground.copy(alpha = 0.5f)
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    "锁定",
+                    fontSize = 14.sp,
+                    color = SidebarOnBackground.copy(alpha = 0.5f)
+                )
+            }
         }
 
-        Divider(
-            modifier = Modifier.fillMaxHeight().width(1.dp),
-            color = MaterialTheme.colorScheme.outlineVariant
-        )
-
-        Box(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-            when (selectedTab) {
-                0 -> HomeScreen()
-                1 -> DiaryScreen(databaseManager)
-                2 -> VaultScreen(databaseManager, securityManager, dek)
-                3 -> WillScreen(databaseManager)
-                4 -> SettingsScreen(securityManager, databaseManager, onLock)
+        // ===== 右侧内容区 =====
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) }
+            ) { tab ->
+                when (tab) {
+                    0 -> HomeScreen(onNavigate = { selectedTab = it })
+                    1 -> DiaryScreen(databaseManager)
+                    2 -> VaultScreen(databaseManager, securityManager, dek)
+                    3 -> WillScreen(databaseManager)
+                    4 -> SettingsScreen(securityManager, databaseManager, onLock)
+                }
             }
         }
     }
