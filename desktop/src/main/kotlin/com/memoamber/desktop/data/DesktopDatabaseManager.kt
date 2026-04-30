@@ -3,7 +3,6 @@ package com.memoamber.desktop.data
 import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
-import java.sql.PreparedStatement
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -67,13 +66,18 @@ class DesktopDatabaseManager {
         insert("community_posts", "content, author, category, tags, created_at", content, author, "general", "", now())
     fun getAllPosts(): List<Map<String, String>> = query("SELECT * FROM community_posts ORDER BY created_at DESC")
 
-    // 通用
+    // 通用 - 使用 last_insert_rowid() 替代 RETURN_GENERATED_KEYS（SQLite JDBC 不支持）
     private fun insert(table: String, columns: String, vararg values: String): Long {
         val placeholders = values.joinToString(",") { "?" }
-        db().prepareStatement("INSERT INTO $table ($columns) VALUES ($placeholders)", PreparedStatement.RETURN_GENERATED_KEYS).use { ps ->
+        db().prepareStatement("INSERT INTO $table ($columns) VALUES ($placeholders)").use { ps ->
             values.forEachIndexed { i, v -> ps.setString(i + 1, v) }
             ps.executeUpdate()
-            ps.generatedKeys.use { rs -> if (rs.next()) return rs.getLong(1) }
+        }
+        // 使用 last_insert_rowid() 获取自增ID（兼容所有 SQLite JDBC 版本）
+        db().createStatement().use { stmt ->
+            stmt.executeQuery("SELECT last_insert_rowid()").use { rs ->
+                if (rs.next()) return rs.getLong(1)
+            }
         }
         return -1
     }
